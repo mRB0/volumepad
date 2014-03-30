@@ -151,7 +151,7 @@ static uint8_t const PROGMEM keyboard_hid_report_desc[] = {
     0x26, 0x02, 0x00,    //   Logical Maximum (0x200),
     0x05, 0x0c,          //   Usage Page (Multimedia/Consumer),
     0x1a, 0x00, 0x00,    //   Usage Minimum (0),
-    0x2a, 0x02, 0x00,    //   Usage Maximum (104),
+    0x2a, 0x02, 0x00,    //   Usage Maximum (0x200),
     0x81, 0x00,          //   Input (Data, Array),
         
     0xc0                 // End Collection
@@ -256,7 +256,8 @@ static volatile uint8_t usb_configuration=0;
 uint8_t keyboard_modifier_keys=0;
 
 // which keys are currently pressed, up to 6 keys may be down at once
-uint8_t keyboard_keys[6]={0,0,0,0,0,0};
+uint8_t keyboard_keys[6] = {0, 0, 0, 0, 0, 0};
+uint16_t media_keys[2] = {0, 0};
 
 // protocol setting from the host.  We use exactly the same report
 // either way, so this variable only stores the setting since we
@@ -304,16 +305,18 @@ uint8_t usb_configured(void)
 
 
 // perform a single keystroke
-int8_t usb_keyboard_press(uint8_t key, uint8_t modifier)
+int8_t usb_keyboard_press(uint8_t key, uint16_t media_key, uint8_t modifier)
 {
 	int8_t r;
 
 	keyboard_modifier_keys = modifier;
 	keyboard_keys[0] = key;
+    media_keys[0] = media_key;
 	r = usb_keyboard_send();
 	if (r) return r;
 	keyboard_modifier_keys = 0;
 	keyboard_keys[0] = 0;
+    media_keys[0] = 0;
 	return usb_keyboard_send();
 }
 
@@ -344,6 +347,11 @@ int8_t usb_keyboard_send(void)
 	UEDATX = 0;
 	for (i=0; i<6; i++) {
 		UEDATX = keyboard_keys[i];
+	}
+	for (i=0; i<2; i++) {
+        for(int j = 0; j < 2; j++) {
+            UEDATX = (media_keys[i] >> (j * 8)) & 0xff;
+        }
 	}
 	UEINTX = 0x3A;
 	keyboard_idle_count = 0;
@@ -389,6 +397,11 @@ ISR(USB_GEN_vect)
 					for (i=0; i<6; i++) {
 						UEDATX = keyboard_keys[i];
 					}
+                    for (i=0; i<2; i++) {
+                        for(int j = 0; j < 2; j++) {
+                            UEDATX = (media_keys[i] >> (j * 8)) & 0xff;
+                        }
+                    }
 					UEINTX = 0x3A;
 				}
 			}
@@ -563,6 +576,11 @@ ISR(USB_COM_vect)
 					for (i=0; i<6; i++) {
 						UEDATX = keyboard_keys[i];
 					}
+                    for (i=0; i<2; i++) {
+                        for(int j = 0; j < 2; j++) {
+                            UEDATX = (media_keys[i] >> (j * 8)) & 0xff;
+                        }
+                    }
 					usb_send_in();
 					return;
 				}
