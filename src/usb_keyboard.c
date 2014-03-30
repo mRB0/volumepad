@@ -99,7 +99,7 @@ static uint8_t const PROGMEM device_descriptor[] = {
     ENDPOINT0_SIZE,                         // bMaxPacketSize0
     LSB(VENDOR_ID), MSB(VENDOR_ID),         // idVendor
     LSB(PRODUCT_ID), MSB(PRODUCT_ID),       // idProduct
-    0x00, 0x01,                             // bcdDevice
+    0x00, 0x02,                             // bcdDevice
     1,                                      // iManufacturer
     2,                                      // iProduct
     0,                                      // iSerialNumber
@@ -123,6 +123,15 @@ static uint8_t const PROGMEM keyboard_hid_report_desc[] = {
         
     0x95, 0x01,          //   Report Count (1),
     0x75, 0x08,          //   Report Size (8),
+    0x15, 0x00,          //   Logical Minimum (0),
+    0x25, 0xff,          //   Logical Maximum (255),
+    0x05, 0x0c,          //   Usage Page (Multimedia/Consumer),
+    0x19, 0x00,          //   Usage Minimum (0),
+    0x29, 0xff,          //   Usage Maximum (255),
+    0x81, 0x00,          //   Input (Data, Array),
+
+    0x95, 0x01,          //   Report Count (1),
+    0x75, 0x08,          //   Report Size (8),
     0x81, 0x03,          //   Input (Constant),                 ;Reserved byte
         
     0x95, 0x05,          //   Report Count (5),
@@ -135,23 +144,14 @@ static uint8_t const PROGMEM keyboard_hid_report_desc[] = {
     0x95, 0x01,          //   Report Count (1),
     0x75, 0x03,          //   Report Size (3),
     0x91, 0x03,          //   Output (Constant),                 ;LED report padding
-        
-    0x95, 0x06,          //   Report Count (6),
+                
+    0x95, 0x05,          //   Report Count (4),
     0x75, 0x08,          //   Report Size (8),
     0x15, 0x00,          //   Logical Minimum (0),
     0x25, 0x68,          //   Logical Maximum(104),
     0x05, 0x07,          //   Usage Page (Key Codes),
     0x19, 0x00,          //   Usage Minimum (0),
     0x29, 0x68,          //   Usage Maximum (104),
-    0x81, 0x00,          //   Input (Data, Array),
-        
-    0x95, 0x02,          //   Report Count (2),
-    0x75, 0x08,          //   Report Size (16),
-    0x15, 0x00,          //   Logical Minimum (0),
-    0x25, 0xff,          //   Logical Maximum (0x200),
-    0x05, 0x0c,          //   Usage Page (Multimedia/Consumer),
-    0x19, 0x00,          //   Usage Minimum (0),
-    0x29, 0xff,          //   Usage Maximum (0x200),
     0x81, 0x00,          //   Input (Data, Array),
         
     0xc0                 // End Collection
@@ -253,11 +253,11 @@ static volatile uint8_t usb_configuration=0;
 // which modifier keys are currently pressed
 // 1=left ctrl,    2=left shift,   4=left alt,    8=left gui
 // 16=right ctrl, 32=right shift, 64=right alt, 128=right gui
-uint8_t keyboard_modifier_keys=0;
+volatile uint8_t keyboard_modifier_keys=0;
 
 // which keys are currently pressed, up to 6 keys may be down at once
-uint8_t keyboard_keys[6] = {0, 0, 0, 0, 0, 0};
-uint16_t media_keys[2] = {0, 0};
+volatile uint8_t keyboard_keys[6] = {0, 0, 0, 0, 0, 0};
+volatile uint16_t media_keys[2] = {0, 0};
 
 // protocol setting from the host.  We use exactly the same report
 // either way, so this variable only stores the setting since we
@@ -320,6 +320,8 @@ int8_t usb_keyboard_press(uint8_t key, uint16_t media_key, uint8_t modifier)
     return usb_keyboard_send();
 }
 
+static void send_key_data();
+
 // send the contents of keyboard_keys and keyboard_modifier_keys
 int8_t usb_keyboard_send(void)
 {
@@ -343,17 +345,7 @@ int8_t usb_keyboard_send(void)
         cli();
         UENUM = KEYBOARD_ENDPOINT;
     }
-    UEDATX = keyboard_modifier_keys;
-    UEDATX = 0;
-    for (i=0; i<6; i++) {
-        UEDATX = keyboard_keys[i];
-    }
-    for (i=0; i<2; i++) {
-        UEDATX = media_keys[i] & 0xff;
-        /* for(int j = 0; j < 2; j++) { */
-        /*     UEDATX = (media_keys[i] >> (j * 8)) & 0xff; */
-        /* } */
-    }
+    send_key_data();
     UEINTX = 0x3A;
     keyboard_idle_count = 0;
     SREG = intr_state;
@@ -366,6 +358,20 @@ int8_t usb_keyboard_send(void)
  *
  **************************************************************************/
 
+static void send_key_data() {
+    int i;
+    UEDATX = keyboard_modifier_keys;
+    for (i=0; i<1; i++) {
+        UEDATX = (uint8_t)(media_keys[i] & 0xff);
+        /* for(int j = 0; j < 2; j++) { */
+        /*     UEDATX = (media_keys[i] >> (j * 8)) & 0xff; */
+        /* } */
+    }
+    UEDATX = 0;
+    for (i=0; i<5; i++) {
+        UEDATX = keyboard_keys[i];
+    }
+}
 
 
 // USB Device Interrupt - handle all device-level events
@@ -393,17 +399,7 @@ ISR(USB_GEN_vect)
                 keyboard_idle_count++;
                 if (keyboard_idle_count == keyboard_idle_config) {
                     keyboard_idle_count = 0;
-                    UEDATX = keyboard_modifier_keys;
-                    UEDATX = 0;
-                    for (i=0; i<6; i++) {
-                        UEDATX = keyboard_keys[i];
-                    }
-                    for (i=0; i<2; i++) {
-                        UEDATX = media_keys[i] & 0xff;
-                        /* for(int j = 0; j < 2; j++) { */
-                        /*     UEDATX = (media_keys[i] >> (j * 8)) & 0xff; */
-                        /* } */
-                    }
+                    send_key_data();
                     UEINTX = 0x3A;
                 }
             }
@@ -573,17 +569,7 @@ ISR(USB_COM_vect)
             if (bmRequestType == 0xA1) {
                 if (bRequest == HID_GET_REPORT) {
                     usb_wait_in_ready();
-                    UEDATX = keyboard_modifier_keys;
-                    UEDATX = 0;
-                    for (i=0; i<6; i++) {
-                        UEDATX = keyboard_keys[i];
-                    }
-                    for (i=0; i<2; i++) {
-                        UEDATX = media_keys[i] & 0xff;
-                        /* for(int j = 0; j < 2; j++) { */
-                        /*     UEDATX = (media_keys[i] >> (j * 8)) & 0xff; */
-                        /* } */
-                    }
+                    send_key_data();
                     usb_send_in();
                     return;
                 }
