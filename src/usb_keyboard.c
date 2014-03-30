@@ -146,12 +146,12 @@ static uint8_t const PROGMEM keyboard_hid_report_desc[] = {
     0x81, 0x00,          //   Input (Data, Array),
         
     0x95, 0x02,          //   Report Count (2),
-    0x75, 0x10,          //   Report Size (16),
-    0x16, 0x00, 0x00,    //   Logical Minimum (0),
-    0x26, 0x02, 0x00,    //   Logical Maximum (0x200),
+    0x75, 0x08,          //   Report Size (16),
+    0x15, 0x00,          //   Logical Minimum (0),
+    0x25, 0xff,          //   Logical Maximum (0x200),
     0x05, 0x0c,          //   Usage Page (Multimedia/Consumer),
-    0x1a, 0x00, 0x00,    //   Usage Minimum (0),
-    0x2a, 0x02, 0x00,    //   Usage Maximum (0x200),
+    0x19, 0x00,          //   Usage Minimum (0),
+    0x29, 0xff,          //   Usage Maximum (0x200),
     0x81, 0x00,          //   Input (Data, Array),
         
     0xc0                 // End Collection
@@ -349,9 +349,10 @@ int8_t usb_keyboard_send(void)
 		UEDATX = keyboard_keys[i];
 	}
 	for (i=0; i<2; i++) {
-        for(int j = 0; j < 2; j++) {
-            UEDATX = (media_keys[i] >> (j * 8)) & 0xff;
-        }
+        UEDATX = media_keys[i] & 0xff;
+        /* for(int j = 0; j < 2; j++) { */
+        /*     UEDATX = (media_keys[i] >> (j * 8)) & 0xff; */
+        /* } */
 	}
 	UEINTX = 0x3A;
 	keyboard_idle_count = 0;
@@ -398,9 +399,10 @@ ISR(USB_GEN_vect)
 						UEDATX = keyboard_keys[i];
 					}
                     for (i=0; i<2; i++) {
-                        for(int j = 0; j < 2; j++) {
-                            UEDATX = (media_keys[i] >> (j * 8)) & 0xff;
-                        }
+                        UEDATX = media_keys[i] & 0xff;
+                        /* for(int j = 0; j < 2; j++) { */
+                        /*     UEDATX = (media_keys[i] >> (j * 8)) & 0xff; */
+                        /* } */
                     }
 					UEINTX = 0x3A;
 				}
@@ -577,9 +579,10 @@ ISR(USB_COM_vect)
 						UEDATX = keyboard_keys[i];
 					}
                     for (i=0; i<2; i++) {
-                        for(int j = 0; j < 2; j++) {
-                            UEDATX = (media_keys[i] >> (j * 8)) & 0xff;
-                        }
+                        UEDATX = media_keys[i] & 0xff;
+                        /* for(int j = 0; j < 2; j++) { */
+                        /*     UEDATX = (media_keys[i] >> (j * 8)) & 0xff; */
+                        /* } */
                     }
 					usb_send_in();
 					return;
