@@ -8,8 +8,26 @@
 #include "usb_keyboard.h"
 
 // Multimedia keys aren't listed in usb_keyboard.h.
+// 
+// These are from usb_hid_usages.txt, from
+// http://www.freebsddiary.org/APC/usb_hid_usages
+// 
+// These keys don't work on Windows, but they work on Mac and
+// apparently Linux.  It looks like Windows expects media keys in the
+// 12 (0x0C) usage page (not 0x07), but usb_keyboard doesn't have any
+// obvious way of specifying a page with a request (although it does
+// mention 0x07 as the key codes usage page on line 116).
+//
+// Translate.pdf is also included, from:
+//
+// http://download.microsoft.com/download/1/6/1/161ba512-40e2-4cc9-843a-923143f3456c/translate.pdf
+// mirror: http://www.hiemalis.org/~keiji/PC/scancode-translate.pdf
+//
+// Hopefully these will work on the Nexus 7.
+
 #define KEY_VOLUME_UP 0x80
 #define KEY_VOLUME_DOWN 0x81
+#define KEY_VOLUME_MUTE 0x7f
 
 struct debounce_state {
     uint8_t state; // pin state
@@ -26,6 +44,7 @@ typedef enum {
 #define LED_OFF		(PORTD &= ~(1<<6))
 #define LED_ON		(PORTD |= (1<<6))
 
+// Specify 0 to not send a key when that button is pressed.
 static uint8_t const SwitchKeyMap[7] = {
     KEY_2, // PORTB0 = S2
     0,     // PORTB1 = A (dial)
@@ -187,21 +206,27 @@ static void run(void) {
                 dial_direction = (((pressed_keys >> DialA) & 0x01) != dial_position) ? DirectionCW : DirectionCCW;
             } else if (dial_moving) {
                 // Dial was moving but now has stopped, as indicated
-                // by the fact that the two inputs now the same
-                // value..
+                // by the fact that the two inputs now have the same
+                // value.
                 dial_moving = 0;
                 if (((pressed_keys >> DialA) & 0x01) != dial_position) {
                     // Dial moved to new position.
                     dial_position = ((pressed_keys >> DialA) & 0x01);
                     if (dial_direction == DirectionCW) {
-                        usb_keyboard_press(KEY_VOLUME_UP, 0);
+                        usb_keyboard_press(KEY_6, KEY_SHIFT);
                     } else {
-                        usb_keyboard_press(KEY_VOLUME_DOWN, 0);
+                        usb_keyboard_press(KEY_V, 0);
                     }
                 } else {
                     // Dial returned to old position.  (Nothing to
                     // do.)
                 }
+            } else if (((pressed_keys >> DialA) & 0x01) != dial_position) {
+                // Dial isn't moving, and A and B positions match, but
+                // they don't match what we expect so we missed a full
+                // click and need to update our internal state to
+                // match.
+                dial_position = ((pressed_keys >> DialA) & 0x01);
             }
 
                 
