@@ -193,7 +193,7 @@ static void run(void) {
 
                     uint8_t key = SwitchKeyMap[i];
                     if (key != 0) {
-                        usb_keyboard_press(key, 0);
+                        usb_keyboard_press(key, 0, 0);
                     }
                 }
             }
@@ -213,9 +213,9 @@ static void run(void) {
                     // Dial moved to new position.
                     dial_position = ((pressed_keys >> DialA) & 0x01);
                     if (dial_direction == DirectionCW) {
-                        usb_keyboard_press(KEY_6, KEY_SHIFT);
+                        usb_keyboard_press(KEY_6, 0, KEY_SHIFT);
                     } else {
-                        usb_keyboard_press(KEY_V, 0);
+                        usb_keyboard_press(KEY_V, 0, 0);
                     }
                 } else {
                     // Dial returned to old position.  (Nothing to
