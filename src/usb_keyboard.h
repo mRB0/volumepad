@@ -13,7 +13,7 @@ int8_t usb_media_send(void);
 
 extern volatile uint8_t keyboard_modifier_keys;
 extern volatile uint8_t keyboard_keys[6];
-extern volatile uint16_t media_keys[2];
+extern volatile uint16_t media_keys[1];
 extern volatile uint8_t keyboard_leds;
 
 // This file does not include the HID debug functions, so these empty
