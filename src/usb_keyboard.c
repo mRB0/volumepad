@@ -99,7 +99,7 @@ static uint8_t const PROGMEM device_descriptor[] = {
     ENDPOINT0_SIZE,                         // bMaxPacketSize0
     LSB(VENDOR_ID), MSB(VENDOR_ID),         // idVendor
     LSB(PRODUCT_ID), MSB(PRODUCT_ID),       // idProduct
-    0x00, 0x02,                             // bcdDevice
+    0x00, 0x03,                             // bcdDevice
     1,                                      // iManufacturer
     2,                                      // iProduct
     0,                                      // iSerialNumber
@@ -123,15 +123,6 @@ static uint8_t const PROGMEM keyboard_hid_report_desc[] = {
         
     0x95, 0x01,          //   Report Count (1),
     0x75, 0x08,          //   Report Size (8),
-    0x15, 0x00,          //   Logical Minimum (0),
-    0x25, 0xff,          //   Logical Maximum (255),
-    0x05, 0x0c,          //   Usage Page (Multimedia/Consumer),
-    0x19, 0x00,          //   Usage Minimum (0),
-    0x29, 0xff,          //   Usage Maximum (255),
-    0x81, 0x00,          //   Input (Data, Array),
-
-    0x95, 0x01,          //   Report Count (1),
-    0x75, 0x08,          //   Report Size (8),
     0x81, 0x03,          //   Input (Constant),                 ;Reserved byte
         
     0x95, 0x05,          //   Report Count (5),
@@ -145,7 +136,7 @@ static uint8_t const PROGMEM keyboard_hid_report_desc[] = {
     0x75, 0x03,          //   Report Size (3),
     0x91, 0x03,          //   Output (Constant),                 ;LED report padding
                 
-    0x95, 0x05,          //   Report Count (4),
+    0x95, 0x06,          //   Report Count (6),
     0x75, 0x08,          //   Report Size (8),
     0x15, 0x00,          //   Logical Minimum (0),
     0x25, 0x68,          //   Logical Maximum(104),
@@ -361,14 +352,14 @@ int8_t usb_keyboard_send(void)
 static void send_key_data() {
     int i;
     UEDATX = keyboard_modifier_keys;
-    for (i=0; i<1; i++) {
-        UEDATX = (uint8_t)(media_keys[i] & 0xff);
-        /* for(int j = 0; j < 2; j++) { */
-        /*     UEDATX = (media_keys[i] >> (j * 8)) & 0xff; */
-        /* } */
-    }
+    /* for (i=0; i<1; i++) { */
+    /*     UEDATX = (uint8_t)(media_keys[i] & 0xff); */
+    /*     /\* for(int j = 0; j < 2; j++) { *\/ */
+    /*     /\*     UEDATX = (media_keys[i] >> (j * 8)) & 0xff; *\/ */
+    /*     /\* } *\/ */
+    /* } */
     UEDATX = 0;
-    for (i=0; i<5; i++) {
+    for (i=0; i<6; i++) {
         UEDATX = keyboard_keys[i];
     }
 }
