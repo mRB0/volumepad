@@ -103,7 +103,7 @@ static uint8_t const PROGMEM device_descriptor[] = {
     ENDPOINT0_SIZE,                         // bMaxPacketSize0
     LSB(VENDOR_ID), MSB(VENDOR_ID),         // idVendor
     LSB(PRODUCT_ID), MSB(PRODUCT_ID),       // idProduct
-    0x00, 0x11,                             // bcdDevice
+    0x00, 0x12,                             // bcdDevice
     1,                                      // iManufacturer
     2,                                      // iProduct
     0,                                      // iSerialNumber
@@ -159,12 +159,12 @@ static uint8_t const PROGMEM media_hid_report_desc[] = {
     0xA1, 0x01,          // Collection (Application),
         
     0x95, 0x01,          //   Report Count (1),
-    0x75, 0x08,          //   Report Size (8),
+    0x75, 0x10,          //   Report Size (16),
     0x15, 0x00,          //   Logical Minimum (0),
-    0x25, 0xff,          //   Logical Maximum (255),
+    0x26, 0x3c, 0x02,    //   Logical Maximum (0x23c),
     0x05, 0x0c,          //   Usage Page (Multimedia/Consumer),
     0x19, 0x00,          //   Usage Minimum (0),
-    0x29, 0xff,          //   Usage Maximum (255),
+    0x2a, 0x3c, 0x02,    //   Usage Maximum (0x23c),
     0x81, 0x00,          //   Input (Data, Array),
         
     0xc0                 // End Collection
@@ -299,7 +299,7 @@ volatile uint8_t keyboard_modifier_keys=0;
 
 // which keys are currently pressed, up to 6 keys may be down at once
 volatile uint8_t keyboard_keys[6] = {0, 0, 0, 0, 0, 0};
-volatile uint16_t media_keys[2] = {0, 0};
+volatile uint16_t media_keys[1] = {0};
 
 // protocol setting from the host.  We use exactly the same report
 // either way, so this variable only stores the setting since we
@@ -454,7 +454,8 @@ static void send_key_data() {
 }
 
 static void send_media_key_data() {
-    UEDATX = media_keys[0];
+    UEDATX = media_keys[0] & 0xff;
+    UEDATX = media_keys[0] >> 8;
 }
 
 
