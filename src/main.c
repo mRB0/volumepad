@@ -24,6 +24,22 @@
 #define IsMediaKey(scancode) (0x1000 & scancode)
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
+#define MODIFIER_KEYS_START 224
+#define MODIFIER_KEYS_END 231
+
+#define KEY_CTRL	224
+#define KEY_SHIFT	225
+#define KEY_ALT		226
+#define KEY_GUI		227
+#define KEY_LEFT_CTRL   224
+#define KEY_LEFT_SHIFT	225
+#define KEY_LEFT_ALT	226
+#define KEY_LEFT_GUI	227
+#define KEY_RIGHT_CTRL	228
+#define KEY_RIGHT_SHIFT	229
+#define KEY_RIGHT_ALT	230
+#define KEY_RIGHT_GUI	231
+
 #define KEY_VOLUME_UP MediaKey(0xe9)
 #define KEY_VOLUME_DOWN MediaKey(0xea)
 #define KEY_VOLUME_MUTE MediaKey(0xe2) // no effect on Nexus 7
@@ -64,6 +80,13 @@ static uint16_t const LongPressTime = 20;
 // switch is pressed.
 //
 // End each array with 0 to indicate the end of the array.
+//
+// Example: Pressing this button would send shift, 2, 3, and
+// play/pause, resulting in the characters @# and the media
+// play/pausing.
+//
+// { ((uint16_t[]){ KEY_2, KEY_SHIFT, KEY_3, KEY_PLAYPAUSE, 0 }),
+//   ((uint16_t[]){ KEY_W, 0 }) },   
 //
 // Long presses behave the following way:
 //
@@ -216,7 +239,6 @@ static void update_debounced_state(uint8_t raw_switches_state) {
                 if (key_val == 1) {
                     // We need to release the long press for this
                     // switch immediately upon release.
-                    long_press_switches &= ~(0x01 << i);
                     long_press_switches |= (key_val << i);
                 }
             }
@@ -227,7 +249,6 @@ static void update_debounced_state(uint8_t raw_switches_state) {
                 // so we register this as a long button press.
 
                 long_press_switches &= ~(0x01 << i);
-                long_press_switches |= (key_val << i);
             }
         }
     }
@@ -241,9 +262,105 @@ static void press(uint16_t encoded_key) {
     }
 }
 
+static void media_key_change(uint16_t key, uint8_t newstate) {
+    uint8_t i, free_index = 255;
+
+    for(i = 0; i < 4; i++) {
+        if (media_keys[i] == key) {
+            if (newstate) {
+                // The key is already on; we can stop altogether
+                free_index = 255;
+                break;
+            } else {
+                media_keys[i] = 0;
+            }
+        }
+        if (newstate && !media_keys[i] && free_index == 255) {
+            free_index = i;
+        }
+    }
+
+    if (newstate && free_index < 4) {
+        // If newstate but free_index == 255, then we either don't
+        // have room in the buffer for the new key, or the key is
+        // already pressed.  Either way we have no action to take.
+        //
+        // This path, however, is when we found an empty slot in the
+        // key buffer, so we put the key into it.
+
+        media_keys[free_index] = key;
+    }
+}
+
+static void basic_key_change(uint8_t key, uint8_t newstate) {
+    uint8_t i, free_index = 255;
+
+    if (key >= MODIFIER_KEYS_START && key <= MODIFIER_KEYS_END) {
+        // modifier keys are stored as bitfields
+        uint8_t affected_field = key & 0x07; // 0b00000xxx: 227 (KEY_GUI) => 0b00000011 (3)
+        uint8_t mask = (newstate ? 0x01 : 0) << affected_field; // 1 << 3 => 0b00001000 (or 0 if turning off)
+
+        keyboard_modifier_keys &= ~(0x01 << affected_field);
+        keyboard_modifier_keys |= mask;
+        
+        return;
+    }
+        
+    for(i = 0; i < 6; i++) {
+        if (keyboard_keys[i] == key) {
+            if (newstate) {
+                // The key is already on; we can stop altogether
+                free_index = 255;
+                break;
+            } else {
+                keyboard_keys[i] = 0;
+            }
+        }
+        if (newstate && !keyboard_keys[i] && free_index == 255) {
+            free_index = i;
+        }
+    }
+
+    if (newstate && free_index < 4) {
+        // If newstate but free_index == 255, then we either don't
+        // have room in the buffer for the new key, or the key is
+        // already pressed.  Either way we have no action to take.
+        //
+        // This path, however, is when we found an empty slot in the
+        // key buffer, so we put the key into it.
+
+        keyboard_keys[free_index] = key;
+    }
+}
+
+static void send_keys(uint16_t *keys, uint8_t pressed) {
+    uint8_t i;
+    
+    for (i = 0; keys[i]; i++) {
+        uint16_t encoded_key = keys[i];
+        
+        if (IsMediaKey(encoded_key)) {
+            media_key_change(encoded_key & 0xfff, pressed);
+        } else {
+            basic_key_change(encoded_key & 0xff, pressed);
+        }
+    }
+    usb_keyboard_send();
+    usb_media_send();
+}
+
+static void press_keys(uint16_t *keys) {
+    send_keys(keys, 1);
+}
+
+static void release_keys(uint16_t *keys) {
+    send_keys(keys, 0);
+}
+
 static void run(void) {
     uint8_t last_pressed_keys = 0x7f;
-
+    uint8_t last_long_pressed_keys = 0x7f;
+    
     uint8_t dial_moving = 0;
     uint8_t dial_position = (PINB >> DialA) & 0x01;
     Direction dial_direction = DirectionCCW;
@@ -283,9 +400,10 @@ static void run(void) {
                 if ((((debounced_switches >> i) & 0x01) == 0) &&
                     ((changed_keys >> i) & 0x01)) {
 
-                    uint16_t *press_keys = SwitchActionMap[i].press_keys;
-                    if (press_keys) {
-                        press(press_keys[0]);
+                    uint16_t *action_keys = SwitchActionMap[i].press_keys;
+                    if (action_keys) {
+                        press_keys(action_keys);
+                        release_keys(action_keys);
                     }
                 }
             }
@@ -323,6 +441,7 @@ static void run(void) {
 
                 
             last_pressed_keys = debounced_switches;
+            last_long_pressed_keys = long_press_switches;
         }
 
     }
