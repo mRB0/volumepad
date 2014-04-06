@@ -140,8 +140,8 @@ static SwitchAction const SwitchActionMap[7] = {
       (uint16_t[]){ KEY_E, KEY_SHIFT, 0 } }
 };
 
-static uint16_t const DialCCWKey = KEY_VOLUME_DOWN;
-static uint16_t const DialCWKey = KEY_VOLUME_UP;
+static uint16_t const DialCCWKeys[] = { KEY_VOLUME_DOWN, 0 };
+static uint16_t const DialCWKeys[] = { KEY_VOLUME_UP, 0 };
 
 static uint8_t const DialA = 1; // PORTB2
 static uint8_t const DialB = 5; // PORTB5
@@ -254,15 +254,7 @@ static void update_debounced_state(uint8_t raw_switches_state) {
     }
 }
 
-static void press(uint16_t encoded_key) {
-    if (IsMediaKey(encoded_key)) {
-        usb_media_press(encoded_key & 0xfff);
-    } else {
-        usb_keyboard_press(encoded_key & 0xff, 0);
-    }
-}
-
-static void media_key_change(uint16_t key, uint8_t newstate) {
+static void media_key_change(uint16_t const key, uint8_t const newstate) {
     uint8_t i, free_index = 255;
 
     for(i = 0; i < 4; i++) {
@@ -292,7 +284,7 @@ static void media_key_change(uint16_t key, uint8_t newstate) {
     }
 }
 
-static void basic_key_change(uint8_t key, uint8_t newstate) {
+static void basic_key_change(uint8_t const key, uint8_t const newstate) {
     uint8_t i, free_index = 255;
 
     if (key >= MODIFIER_KEYS_START && key <= MODIFIER_KEYS_END) {
@@ -333,7 +325,7 @@ static void basic_key_change(uint8_t key, uint8_t newstate) {
     }
 }
 
-static void send_keys(uint16_t *keys, uint8_t pressed) {
+static void send_keys(uint16_t const *const keys, uint8_t const pressed) {
     uint8_t i;
     
     for (i = 0; keys[i]; i++) {
@@ -349,11 +341,11 @@ static void send_keys(uint16_t *keys, uint8_t pressed) {
     usb_media_send();
 }
 
-static void press_keys(uint16_t *keys) {
+static void press_keys(uint16_t const *const keys) {
     send_keys(keys, 1);
 }
 
-static void release_keys(uint16_t *keys) {
+static void release_keys(uint16_t const *const keys) {
     send_keys(keys, 0);
 }
 
@@ -423,9 +415,11 @@ static void run(void) {
                     // Dial moved to new position.
                     dial_position = ((debounced_switches >> DialA) & 0x01);
                     if (dial_direction == DirectionCW) {
-                        press(DialCWKey);
+                        press_keys(DialCWKeys);
+                        release_keys(DialCWKeys);
                     } else {
-                        press(DialCCWKey);
+                        press_keys(DialCCWKeys);
+                        release_keys(DialCCWKeys);
                     }
                 } else {
                     // Dial returned to old position.  (Nothing to
