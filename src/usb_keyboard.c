@@ -158,7 +158,7 @@ static uint8_t const PROGMEM media_hid_report_desc[] = {
     0x09, 0x01,          // Usage (Keyboard),
     0xA1, 0x01,          // Collection (Application),
         
-    0x95, 0x01,          //   Report Count (1),
+    0x95, 0x04,          //   Report Count (4),
     0x75, 0x10,          //   Report Size (16),
     0x15, 0x00,          //   Logical Minimum (0),
     0x26, 0x3c, 0x02,    //   Logical Maximum (0x23c),
@@ -299,7 +299,7 @@ volatile uint8_t keyboard_modifier_keys=0;
 
 // which keys are currently pressed, up to 6 keys may be down at once
 volatile uint8_t keyboard_keys[6] = {0, 0, 0, 0, 0, 0};
-volatile uint16_t media_keys[1] = {0};
+volatile uint16_t media_keys[4] = {0, 0, 0, 0};
 
 // protocol setting from the host.  We use exactly the same report
 // either way, so this variable only stores the setting since we
@@ -454,8 +454,11 @@ static void send_key_data() {
 }
 
 static void send_media_key_data() {
-    UEDATX = media_keys[0] & 0xff;
-    UEDATX = media_keys[0] >> 8;
+    int i;
+    for(i = 0; i < 4; i++) {
+        UEDATX = media_keys[i] & 0xff;
+        UEDATX = media_keys[i] >> 8;
+    }
 }
 
 
