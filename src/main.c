@@ -9,25 +9,27 @@
 
 // Multimedia keys aren't listed in usb_keyboard.h.
 // 
-// These are from usb_hid_usages.txt, from
+// The ones used here are from usb_hid_usages.txt, from
 // http://www.freebsddiary.org/APC/usb_hid_usages
 // 
-// These keys don't work on Windows, but they work on Mac and
-// apparently Linux.  It looks like Windows expects media keys in the
-// 12 (0x0C) usage page (not 0x07), but usb_keyboard doesn't have any
-// obvious way of specifying a page with a request (although it does
-// mention 0x07 as the key codes usage page on line 116).
-//
 // Translate.pdf is also included, from:
 //
 // http://download.microsoft.com/download/1/6/1/161ba512-40e2-4cc9-843a-923143f3456c/translate.pdf
 // mirror: http://www.hiemalis.org/~keiji/PC/scancode-translate.pdf
 //
-// Hopefully these will work on the Nexus 7.
+// It has some extra keys that are missing from usb_hid_usages, most
+// notably play/pause.
 
-#define KEY_VOLUME_UP 0x80
-#define KEY_VOLUME_DOWN 0x81
-#define KEY_VOLUME_MUTE 0x7f
+#define MediaKey(scancode) (0x1000 | scancode)
+#define IsMediaKey(scancode) (0x1000 & scancode)
+
+#define KEY_VOLUME_UP MediaKey(0xe9)
+#define KEY_VOLUME_DOWN MediaKey(0xea)
+#define KEY_VOLUME_MUTE MediaKey(0xe2)
+#define KEY_SLEEP MediaKey(0x32)
+#define KEY_PLAYPAUSE MediaKey(0xcd)
+#define KEY_PREV MediaKey(0xb6)
+#define KEY_NEXT MediaKey(0xb5)
 
 struct debounce_state {
     uint8_t state; // pin state
@@ -45,15 +47,18 @@ typedef enum {
 #define LED_ON		(PORTD |= (1<<6))
 
 // Specify 0 to not send a key when that button is pressed.
-static uint8_t const SwitchKeyMap[7] = {
-    KEY_2, // PORTB0 = S2
-    0,     // PORTB1 = A (dial)
-    KEY_1, // PORTB2 = S1
-    KEY_5, // PORTB3 = S5
-    KEY_4, // PORTB4 = S4
-    0,     // PORTB5 = B (dial)
-    KEY_3, // PORTB6 = S3
+static uint16_t const SwitchKeyMap[7] = {
+    KEY_PLAYPAUSE,   // PORTB0 = S2
+    0,               // PORTB1 = A (dial)
+    KEY_SLEEP,       // PORTB2 = S1
+    KEY_NEXT,        // PORTB3 = S5
+    KEY_4,           // PORTB4 = S4
+    0,               // PORTB5 = B (dial)
+    KEY_PREV,        // PORTB6 = S3
 };
+
+static uint16_t const DialCCWKey = KEY_VOLUME_DOWN;
+static uint16_t const DialCWKey = KEY_VOLUME_UP;
 
 static uint8_t const DialA = 1; // PORTB2
 static uint8_t const DialB = 5; // PORTB5
@@ -149,6 +154,14 @@ static uint8_t update_debounced_state(uint8_t raw_switches_state) {
     return debounced_switches;
 }
 
+static void press(uint16_t encoded_key) {
+    if (IsMediaKey(encoded_key)) {
+        usb_media_press(encoded_key & 0xfff);
+    } else {
+        usb_keyboard_press(encoded_key & 0xff, 0);
+    }
+}
+
 static void run(void) {
     uint8_t last_pressed_keys = 0x7f;
 
@@ -191,9 +204,9 @@ static void run(void) {
                 if ((((pressed_keys >> i) & 0x01) == 0) &&
                     ((changed_keys >> i) & 0x01)) {
 
-                    uint8_t key = SwitchKeyMap[i];
+                    uint16_t key = SwitchKeyMap[i];
                     if (key != 0) {
-                        usb_keyboard_press(key, 0);
+                        press(key);
                     }
                 }
             }
@@ -213,9 +226,9 @@ static void run(void) {
                     // Dial moved to new position.
                     dial_position = ((pressed_keys >> DialA) & 0x01);
                     if (dial_direction == DirectionCW) {
-                        usb_media_press(0xE9);
+                        press(DialCWKey);
                     } else {
-                        usb_media_press(0xEA);
+                        press(DialCCWKey);
                     }
                 } else {
                     // Dial returned to old position.  (Nothing to
