@@ -22,19 +22,20 @@
 
 #define MediaKey(scancode) (0x1000 | scancode)
 #define IsMediaKey(scancode) (0x1000 & scancode)
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 #define KEY_VOLUME_UP MediaKey(0xe9)
 #define KEY_VOLUME_DOWN MediaKey(0xea)
-#define KEY_VOLUME_MUTE MediaKey(0xe2)
+#define KEY_VOLUME_MUTE MediaKey(0xe2) // no effect on Nexus 7
 #define KEY_SLEEP MediaKey(0x32)
 #define KEY_PLAYPAUSE MediaKey(0xcd)
 #define KEY_PREV MediaKey(0xb6)
 #define KEY_NEXT MediaKey(0xb5)
 
-struct debounce_state {
+typedef struct {
     uint8_t state; // pin state
-    uint8_t count; // how many ticks it has been in this state
-};
+    uint16_t count; // how many ticks it has been in this state
+} PinState;
 
 typedef enum {
     DirectionCCW,
@@ -46,15 +47,74 @@ typedef enum {
 #define LED_OFF		(PORTD &= ~(1<<6))
 #define LED_ON		(PORTD |= (1<<6))
 
-// Specify 0 to not send a key when that button is pressed.
-static uint16_t const SwitchKeyMap[7] = {
-    KEY_PLAYPAUSE,   // PORTB0 = S2
-    0,               // PORTB1 = A (dial)
-    KEY_SLEEP,       // PORTB2 = S1
-    KEY_NEXT,        // PORTB3 = S5
-    KEY_4,           // PORTB4 = S4
-    0,               // PORTB5 = B (dial)
-    KEY_PREV,        // PORTB6 = S3
+typedef struct {
+    uint16_t *press_keys;
+    uint16_t *long_press_keys;
+} SwitchAction;
+
+// Number of ticks that must pass before a held key is treated as a
+// long press.
+static uint16_t const LongPressTime = 20;
+
+#ifndef NULL
+#define NULL ((void *)0)
+#endif
+
+// Specify NULL instead of an array to not send any keys when that
+// switch is pressed.
+//
+// End each array with 0 to indicate the end of the array.
+//
+// Long presses behave the following way:
+//
+//   press = NULL, long_press = NULL:
+//
+//     No action when pressed/released
+//
+//   press = keys, long_press = NULL:
+//
+//     When switch is active, the keys are pressed and held until the
+//     switch is released.
+//
+//   press = keys, long_press = keys:
+//
+//     When switch is active, nothing happens until LongPressTime
+//     ticks have passed; then the long-press keys are pressed and
+//     held until the switch is released.  If the switch is released
+//     before LongPressTime, then the normal keys are sent briefly
+//     (ie. a single keypress).
+//
+//   press = NULL, long_press = keys:
+//
+//     Same as previous but nothing happens if the switch is released
+//     before LongPressTime.
+// 
+static SwitchAction const SwitchActionMap[7] = {
+    // PORTB0 = S2
+    { ((uint16_t[]){ KEY_2, 0 }),
+      ((uint16_t[]){ KEY_W, 0 }) },   
+
+    // PORTB1 = A (dial; ignored)
+    { NULL, NULL },              
+
+    // PORTB2 = S1        
+    { (uint16_t[]){ KEY_1, 0 },     
+      (uint16_t[]){ KEY_Q, KEY_SHIFT, 0 } },
+
+    // PORTB3 = S5
+    { (uint16_t[]){ KEY_5, 0 },     
+      (uint16_t[]){ KEY_T, KEY_SHIFT, 0 } },
+
+    // PORTB4 = S4
+    { (uint16_t[]){ KEY_4, 0 },     
+      (uint16_t[]){ KEY_R, KEY_SHIFT, 0 } },
+
+    // PORTB5 = B (dial; ignored)
+    { NULL, NULL },              
+
+    // PORTB6 = S3 */
+    { (uint16_t[]){ KEY_3, 0 },
+      (uint16_t[]){ KEY_E, KEY_SHIFT, 0 } }
 };
 
 static uint16_t const DialCCWKey = KEY_VOLUME_DOWN;
@@ -85,11 +145,12 @@ static volatile uint8_t _timer0_fired;
     // Default state: all high = nothing pressed
 static volatile uint8_t _raw_switches_state;
 
-static struct debounce_state switch_debounce_states[7];
+static PinState switch_debounce_states[7];
 static uint8_t debounced_switches = 0x7f;
+static uint8_t long_press_switches = 0x7f;
 
 static void setup(void) {
-	// 16 MHz clock speed
+    // 16 MHz clock speed
 	CPU_PRESCALE(0);
 
     // Configure PORTB[0:6] as inputs.
@@ -126,32 +187,50 @@ static void setup(void) {
     _timer0_fired = 0;
 }
 
-static uint8_t update_debounced_state(uint8_t raw_switches_state) {
+static void update_debounced_state(uint8_t raw_switches_state) {
     for(int i = 0; i < 7; i++) {
         uint8_t key_val = (raw_switches_state >> i) & 0x01;
         if (key_val != switch_debounce_states[i].state) {
             // Any time the read value doesn't match our debounce
             // state, we reset the count.
+            
             switch_debounce_states[i].count = 0;
             switch_debounce_states[i].state = key_val;
-        } else if (switch_debounce_states[i].count < DebounceTickLimit) {
+
+        } else if (switch_debounce_states[i].count < MAX(DebounceTickLimit, LongPressTime)) {
             // If it DOES match and we haven't reached the debounce
             // tick limit, we increment it.
+            
             switch_debounce_states[i].count++;
+            
             if (switch_debounce_states[i].count == DebounceTickLimit) {
                 // Once we've hit the tick limit, we register that as
                 // a keypress state change.
                 
                 // Clear the bit for this switch, and then set it to
                 // the new, debounced value.
+                
                 debounced_switches &= ~(0x01 << i);
                 debounced_switches |= (key_val << i);
+
+                if (key_val == 1) {
+                    // We need to release the long press for this
+                    // switch immediately upon release.
+                    long_press_switches &= ~(0x01 << i);
+                    long_press_switches |= (key_val << i);
+                }
             }
-            
+
+            if ((switch_debounce_states[i].count == LongPressTime) &&
+                (key_val == 0)) {
+                // The tick limit for a long press has been reached,
+                // so we register this as a long button press.
+
+                long_press_switches &= ~(0x01 << i);
+                long_press_switches |= (key_val << i);
+            }
         }
     }
-    
-    return debounced_switches;
 }
 
 static void press(uint16_t encoded_key) {
@@ -194,37 +273,37 @@ static void run(void) {
 
         sei();
 
-        if (timer0_fired) {            
-            uint8_t pressed_keys = update_debounced_state(raw_switches_state);
-            uint8_t changed_keys = last_pressed_keys ^ pressed_keys;
+        if (timer0_fired) {
+            update_debounced_state(raw_switches_state);
+            uint8_t changed_keys = last_pressed_keys ^ debounced_switches;
 
             // Process normal keys
             for(int i = 0; i < 7; i++) {
                 // A switch is pressed if it's logic low.
-                if ((((pressed_keys >> i) & 0x01) == 0) &&
+                if ((((debounced_switches >> i) & 0x01) == 0) &&
                     ((changed_keys >> i) & 0x01)) {
 
-                    uint16_t key = SwitchKeyMap[i];
-                    if (key != 0) {
-                        press(key);
+                    uint16_t *press_keys = SwitchActionMap[i].press_keys;
+                    if (press_keys) {
+                        press(press_keys[0]);
                     }
                 }
             }
 
             // Process dial
-            if (((pressed_keys >> DialA) & 0x01) != ((pressed_keys >> DialB) & 0x01)) {
+            if (((debounced_switches >> DialA) & 0x01) != ((debounced_switches >> DialB) & 0x01)) {
                 // The dial inputs are different from one another, so
                 // it's moving now.
                 dial_moving = 1;
-                dial_direction = (((pressed_keys >> DialA) & 0x01) != dial_position) ? DirectionCW : DirectionCCW;
+                dial_direction = (((debounced_switches >> DialA) & 0x01) != dial_position) ? DirectionCW : DirectionCCW;
             } else if (dial_moving) {
                 // Dial was moving but now has stopped, as indicated
                 // by the fact that the two inputs now have the same
                 // value.
                 dial_moving = 0;
-                if (((pressed_keys >> DialA) & 0x01) != dial_position) {
+                if (((debounced_switches >> DialA) & 0x01) != dial_position) {
                     // Dial moved to new position.
-                    dial_position = ((pressed_keys >> DialA) & 0x01);
+                    dial_position = ((debounced_switches >> DialA) & 0x01);
                     if (dial_direction == DirectionCW) {
                         press(DialCWKey);
                     } else {
@@ -234,16 +313,16 @@ static void run(void) {
                     // Dial returned to old position.  (Nothing to
                     // do.)
                 }
-            } else if (((pressed_keys >> DialA) & 0x01) != dial_position) {
+            } else if (((debounced_switches >> DialA) & 0x01) != dial_position) {
                 // Dial isn't moving, and A and B positions match, but
                 // they don't match what we expect so we missed a full
                 // click and need to update our internal state to
                 // match.
-                dial_position = ((pressed_keys >> DialA) & 0x01);
+                dial_position = ((debounced_switches >> DialA) & 0x01);
             }
 
                 
-            last_pressed_keys = pressed_keys;
+            last_pressed_keys = debounced_switches;
         }
 
     }
