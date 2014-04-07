@@ -7,6 +7,10 @@
 
 #include "usb_keyboard.h"
 
+#ifndef NULL
+#define NULL ((void *)0)
+#endif
+
 // Multimedia keys aren't listed in usb_keyboard.h.
 // 
 // The ones used here are from usb_hid_usages.txt, from
@@ -19,10 +23,12 @@
 //
 // It has some extra keys that are missing from usb_hid_usages, most
 // notably play/pause.
+//
+// Add more to this list if you need them, and then add them to
+// SwitchActionMap.
 
 #define MediaKey(scancode) (0x1000 | scancode)
 #define IsMediaKey(scancode) (0x1000 & scancode)
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 #define MODIFIER_KEYS_START 224
 #define MODIFIER_KEYS_END 231
@@ -69,24 +75,13 @@ typedef struct {
 } SwitchAction;
 
 // Number of ticks that must pass before a held key is treated as a
-// long press.
-static uint16_t const LongPressTime = 20;
-
-#ifndef NULL
-#define NULL ((void *)0)
-#endif
+// long press.  This must be greater than DebounceTickLimit.
+static uint16_t const LongPressTime = 80;
 
 // Specify NULL instead of an array to not send any keys when that
 // switch is pressed.
 //
 // End each array with 0 to indicate the end of the array.
-//
-// Example: Pressing this button would send shift, 2, 3, and
-// play/pause, resulting in the characters @# and the media
-// play/pausing.
-//
-// { ((uint16_t[]){ KEY_2, KEY_SHIFT, KEY_3, KEY_PLAYPAUSE, 0 }),
-//   ((uint16_t[]){ KEY_W, 0 }) },   
 //
 // Long presses behave the following way:
 //
@@ -112,30 +107,53 @@ static uint16_t const LongPressTime = 20;
 //     Same as previous but nothing happens if the switch is released
 //     before LongPressTime.
 // 
+//
+//  Example: Pressing this button would send shift, 2, 3, and
+//    play/pause, resulting in the characters @# and the media
+//    play/pausing.
+//
+// { ((uint16_t[]){ KEY_2, KEY_SHIFT, KEY_3, KEY_PLAYPAUSE, 0 }),
+//   ((uint16_t[]){ KEY_W, 0 }) },   
+//
+//
+// Example: Pressing this button immediately sends a '2'.  Holding
+//   it triggers key-repeat on the host until it's released.
+//
+// { ((uint16_t[]){ KEY_2, 0 }),
+//   NULL },   
+//
+// Example: Pressing this button does nothing immediately.  If you
+//   release it quickly, it sends a 1 upon release.  If you hold it,
+//   it sends shift+Q and holds them down until you release,
+//   triggering key-repeat on the host.
+//
+// { (uint16_t[]){ KEY_1, 0 },     
+//   (uint16_t[]){ KEY_Q, KEY_SHIFT, 0 } },
+//
 static SwitchAction const SwitchActionMap[7] = {
-    // PORTB0 = S2
+    // PORTB0 = S2 / down
     { ((uint16_t[]){ KEY_2, 0 }),
-      ((uint16_t[]){ KEY_W, 0 }) },   
+      NULL },   
 
     // PORTB1 = A (dial; ignored)
     { NULL, NULL },              
 
-    // PORTB2 = S1        
+    // PORTB2 = S1 / center
     { (uint16_t[]){ KEY_1, 0 },     
       (uint16_t[]){ KEY_Q, KEY_SHIFT, 0 } },
 
-    // PORTB3 = S5
+    // PORTB3 = S5 / left
     { (uint16_t[]){ KEY_5, 0 },     
       (uint16_t[]){ KEY_T, KEY_SHIFT, 0 } },
 
-    // PORTB4 = S4
+    // PORTB4 = S4 / up
     { (uint16_t[]){ KEY_4, 0 },     
       (uint16_t[]){ KEY_R, KEY_SHIFT, 0 } },
 
     // PORTB5 = B (dial; ignored)
     { NULL, NULL },              
 
-    // PORTB6 = S3 */
+    // PORTB6 = S3 / right
     { (uint16_t[]){ KEY_3, 0 },
       (uint16_t[]){ KEY_E, KEY_SHIFT, 0 } }
 };
@@ -165,11 +183,26 @@ static uint8_t const DebounceTickLimit = 3;
 
 // Interrupt communication.
 static volatile uint8_t _timer0_fired;
-    // Default state: all high = nothing pressed
+// Default state: all high = nothing pressed
 static volatile uint8_t _raw_switches_state;
 
+// Switch debounce states count how long a switch has been in a given
+// state.  Its calculated state (stored in debounced_switches and
+// long_press_switches) is updated after it has been in a given state
+// for more than DebounceTickLimit ticks, and then again after
+// LongPressTime ticks.
 static PinState switch_debounce_states[7];
+
+// Switch states.  There are seven switches, with their states stored
+// in the 7 LSBs of this field.  Logic 1 means the switch is NOT
+// pressed.
+
+// Post-debouncing switch states: 0 = pressed and 1 = not pressed.
 static uint8_t debounced_switches = 0x7f;
+// Long-press states: 0 = pressed for a long time and 1 = not pressed
+// for a long time yet.  When a bit is set 1 in debounced_switches, it
+// is also set 1 here, so long presses are only counted for button
+// presses.
 static uint8_t long_press_switches = 0x7f;
 
 static void setup(void) {
@@ -220,7 +253,7 @@ static void update_debounced_state(uint8_t raw_switches_state) {
             switch_debounce_states[i].count = 0;
             switch_debounce_states[i].state = key_val;
 
-        } else if (switch_debounce_states[i].count < MAX(DebounceTickLimit, LongPressTime)) {
+        } else if (switch_debounce_states[i].count < LongPressTime) {
             // If it DOES match and we haven't reached the debounce
             // tick limit, we increment it.
             
@@ -297,7 +330,7 @@ static void basic_key_change(uint8_t const key, uint8_t const newstate) {
         
         return;
     }
-        
+    
     for(i = 0; i < 6; i++) {
         if (keyboard_keys[i] == key) {
             if (newstate) {
@@ -385,22 +418,76 @@ static void run(void) {
         if (timer0_fired) {
             update_debounced_state(raw_switches_state);
             uint8_t changed_keys = last_pressed_keys ^ debounced_switches;
-
-            // Process normal keys
+            uint8_t changed_long_keys = last_long_pressed_keys ^ long_press_switches;
+                
+            //
+            // Process normal switches
+            //
+            
             for(int i = 0; i < 7; i++) {
                 // A switch is pressed if it's logic low.
+                
+                uint16_t *action_keys = SwitchActionMap[i].press_keys;
+                uint16_t *action_long_keys = SwitchActionMap[i].long_press_keys;
+                    
                 if ((((debounced_switches >> i) & 0x01) == 0) &&
                     ((changed_keys >> i) & 0x01)) {
-
-                    uint16_t *action_keys = SwitchActionMap[i].press_keys;
-                    if (action_keys) {
+                    // Switch became newly-pressed.  If there are no
+                    // long-press actions for this key, we want to
+                    // start pressing it.
+                    
+                    if (!action_long_keys && action_keys) {
                         press_keys(action_keys);
-                        release_keys(action_keys);
+                    }
+                }
+
+                if ((((long_press_switches >> i) & 0x01) == 0) &&
+                    ((changed_long_keys >> i) & 0x01)) {
+                    // Switch became newly-long-pressed.
+                    
+                    if (action_long_keys) {
+                        press_keys(action_long_keys);
+                    }
+                }
+                
+                if ((((debounced_switches >> i) & 0x01) == 1) &&
+                    ((changed_keys >> i) & 0x01)) {
+                    // Switch was released.
+
+                    if (action_long_keys) {
+                        if ((((long_press_switches >> i) & 0x01) == 1) &&
+                            ((changed_long_keys >> i) & 0x01)) {
+                            // Switch was released from a long-press
+                            // action.
+                            //
+                            // NB. long_press_switches must always be
+                            // 1 here if debounced_switches is 1,
+                            // because both fields should be cleared
+                            // when a key is released.  If not,
+                            // there's a bug.
+                            
+                            release_keys(action_long_keys);
+                        } else {
+                            // Switch was released before the
+                            // long-press action triggered.  We'll
+                            // trigger a single quick press and
+                            // release of the short-press keys.
+                            press_keys(action_keys);
+                            release_keys(action_keys);
+                        }
+                    } else {
+                        if (action_keys) {
+                            // Release the short press keys.
+                            release_keys(action_keys);
+                        }
                     }
                 }
             }
 
+            //
             // Process dial
+            //
+            
             if (((debounced_switches >> DialA) & 0x01) != ((debounced_switches >> DialB) & 0x01)) {
                 // The dial inputs are different from one another, so
                 // it's moving now.
