@@ -53,9 +53,12 @@
 #define KEY_VOLUME_DOWN MediaKey(0xea)
 #define KEY_VOLUME_MUTE MediaKey(0xe2) // no effect on Nexus 7
 #define KEY_SLEEP MediaKey(0x32)
+#define KEY_POWER MediaKey(0x30) // Nexus 7: sending KEY_POWER shows the power-off menu; holding KEY_SLEEP does the same
 #define KEY_PLAYPAUSE MediaKey(0xcd)
 #define KEY_PREV MediaKey(0xb6)
 #define KEY_NEXT MediaKey(0xb5)
+#define KEY_WWWHOME MediaKey(0x223) // Nexus 7: same as device home button
+#define KEY_WWWSEARCH MediaKey(0x221) // Nexus 7: this is the same as the hardware search button on many devices, but note that it triggers upon release, not press
 
 typedef struct {
     uint8_t state; // pin state
@@ -130,30 +133,30 @@ typedef struct {
 //
 static SwitchAction const SwitchActionMap[7] = {
     // PORTB0 = S2 / down
-    { ((uint16_t[]){ KEY_2, 0 }),
-      NULL },   
+    { (uint16_t[]){ KEY_WWWHOME, 0 },
+      (uint16_t[]){ KEY_WWWSEARCH, 0 } },   
 
     // PORTB1 = A (dial; ignored)
     { NULL, NULL },              
 
     // PORTB2 = S1 / center
-    { (uint16_t[]){ KEY_1, 0 },     
-      (uint16_t[]){ KEY_Q, KEY_SHIFT, 0 } },
+    { (uint16_t[]){ KEY_SLEEP, 0 },     
+      NULL },
 
     // PORTB3 = S5 / left
-    { (uint16_t[]){ KEY_5, 0 },     
-      (uint16_t[]){ KEY_T, KEY_SHIFT, 0 } },
+    { (uint16_t[]){ KEY_PREV, 0 },     
+      NULL },
 
     // PORTB4 = S4 / up
-    { (uint16_t[]){ KEY_4, 0 },     
-      (uint16_t[]){ KEY_R, KEY_SHIFT, 0 } },
+    { (uint16_t[]){ KEY_PLAYPAUSE, 0 },     
+      NULL },
 
     // PORTB5 = B (dial; ignored)
     { NULL, NULL },              
 
     // PORTB6 = S3 / right
-    { (uint16_t[]){ KEY_3, 0 },
-      (uint16_t[]){ KEY_E, KEY_SHIFT, 0 } }
+    { (uint16_t[]){ KEY_NEXT, 0 },
+      NULL }
 };
 
 // The keys sent for each counter-clockwise or clockwise rotation of
