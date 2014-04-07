@@ -11,6 +11,10 @@
 #define NULL ((void *)0)
 #endif
 
+//
+// Private definitions and types
+//
+
 // Multimedia keys aren't listed in usb_keyboard.h.
 // 
 // The ones used here are from usb_hid_usages.txt, from
@@ -28,7 +32,6 @@
 // SwitchActionMap.
 
 #define MediaKey(scancode) (0x1000 | scancode)
-#define IsMediaKey(scancode) (0x1000 & scancode)
 
 #define MODIFIER_KEYS_START 224
 #define MODIFIER_KEYS_END 231
@@ -64,24 +67,14 @@ typedef enum {
     DirectionCW
 } Direction;
 
-#define CPU_PRESCALE(n)	(CLKPR = 0x80, CLKPR = (n))
-#define LED_CONFIG	(DDRD |= (1<<6))
-#define LED_OFF		(PORTD &= ~(1<<6))
-#define LED_ON		(PORTD |= (1<<6))
-
 typedef struct {
     uint16_t *press_keys;
     uint16_t *long_press_keys;
 } SwitchAction;
 
-// Number of ticks that must pass before a held key is treated as a
-// long press.  This must be greater than DebounceTickLimit.
 //
-// We get 244.14 ticks per second (configurable; see Timer0Overflow),
-// so you can calculate your preferred time:
+// Begin user-configurable section.
 //
-// LongPressTime = time_in_ms * 244.14 / 1000
-static uint16_t const LongPressTime = 160;   // About 2/3 of a second.
 
 // Specify NULL instead of an array to not send any keys when that
 // switch is pressed.
@@ -163,14 +156,27 @@ static SwitchAction const SwitchActionMap[7] = {
       (uint16_t[]){ KEY_E, KEY_SHIFT, 0 } }
 };
 
+// The keys sent for each counter-clockwise or clockwise rotation of
+// the dial.  These are key arrays that work like the actions above,
+// so you could send multiple keys for each dial click if you really
+// wanted.
 static uint16_t const DialCCWKeys[] = { KEY_VOLUME_DOWN, 0 };
 static uint16_t const DialCWKeys[] = { KEY_VOLUME_UP, 0 };
 
-static uint8_t const DialA = 1; // PORTB2
-static uint8_t const DialB = 5; // PORTB5
+// Number of ticks that must pass before a held key is treated as a
+// long press.  This must be greater than DebounceTickLimit.
+//
+// We get 244.14 ticks per second (configurable; see Timer0Overflow),
+// so you can calculate your preferred time:
+//
+// LongPressTime = time_in_ms * 244.14 / 1000
+static uint16_t const LongPressTime = 160;   // About 2/3 of a second.
 
+// You probably won't need or want to change anything after this
+// line.
 
-// Timer 0 clock select (prescaling; controls TCCR0B[2:0] aka CS0[2:0]).
+// Timer 0 clock select (prescaling; controls TCCR0B[2:0] aka
+// CS0[2:0]).
 //
 // This controls how fast the system ticks.  We need to debounce
 // before registering a keypress, so this should be reasonably fast in
@@ -184,12 +190,43 @@ static uint8_t const Timer0Overflow = 0x04;
 
 // Number of consecutive ticks that a switch has to maintain the same
 // value in order to register a keypress.
+//
+// Calculated the same way as LongPressTime, and affected by
+// Timer0Overflow in the same way as well.
 static uint8_t const DebounceTickLimit = 3;
 
-// Interrupt communication.
+
+//
+// End of user-configurable stuff.
+//
+
+
+#define CPU_PRESCALE(n)	(CLKPR = 0x80, CLKPR = (n))
+#define LED_CONFIG	(DDRD |= (1<<6))
+#define LED_OFF		(PORTD &= ~(1<<6))
+#define LED_ON		(PORTD |= (1<<6))
+
+//
+// Constants
+//
+
+// Switches that represent the dial.
+static uint8_t const DialA = 1; // PORTB2
+static uint8_t const DialB = 5; // PORTB5
+
+//
+// Interrupt state
+//
+
+// Whether timer0 fired or not.  Set in ISR, and cleared in main.
 static volatile uint8_t _timer0_fired;
-// Default state: all high = nothing pressed
+// Raw switches read from PORTB.  Default state: all high = nothing
+// pressed
 static volatile uint8_t _raw_switches_state;
+
+//
+// Derived/calculated key state
+//
 
 // Switch debounce states count how long a switch has been in a given
 // state.  Its calculated state (stored in debounced_switches and
@@ -209,6 +246,12 @@ static uint8_t debounced_switches = 0x7f;
 // is also set 1 here, so long presses are only counted for button
 // presses.
 static uint8_t long_press_switches = 0x7f;
+
+//
+// Functions
+//
+
+#define IsMediaKey(scancode) (0x1000 & scancode)
 
 static void setup(void) {
     // 16 MHz clock speed
