@@ -49,6 +49,8 @@
 #define KEY_RIGHT_ALT	230
 #define KEY_RIGHT_GUI	231
 
+// Wrapping a key in MediaKey makes it send as a "consumer" key (0x0C / 12
+// in the above tables).
 #define KEY_VOLUME_UP MediaKey(0xe9)
 #define KEY_VOLUME_DOWN MediaKey(0xea)
 #define KEY_VOLUME_MUTE MediaKey(0xe2) // no effect on Nexus 7
@@ -57,6 +59,8 @@
 #define KEY_PLAYPAUSE MediaKey(0xcd)
 #define KEY_PREV MediaKey(0xb6)
 #define KEY_NEXT MediaKey(0xb5)
+#define KEY_REWIND MediaKey(0xb4)
+#define KEY_FASTFORWARD MediaKey(0xb3)
 #define KEY_WWWHOME MediaKey(0x223) // Nexus 7: same as device home button
 #define KEY_WWWSEARCH MediaKey(0x221) // Nexus 7: this is the same as the hardware search button on many devices, but note that it triggers upon release, not press
 
@@ -145,7 +149,7 @@ static SwitchAction const SwitchActionMap[7] = {
 
     // PORTB3 = S5 / left
     { (uint16_t[]){ KEY_PREV, 0 },     
-      NULL },
+      (uint16_t[]){ KEY_REWIND, 0 } },
 
     // PORTB4 = S4 / up
     { (uint16_t[]){ KEY_PLAYPAUSE, 0 },     
@@ -156,7 +160,7 @@ static SwitchAction const SwitchActionMap[7] = {
 
     // PORTB6 = S3 / right
     { (uint16_t[]){ KEY_NEXT, 0 },
-      NULL }
+      (uint16_t[]){ KEY_FASTFORWARD, 0 } }
 };
 
 // The keys sent for each counter-clockwise or clockwise rotation of
