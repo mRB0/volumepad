@@ -57,6 +57,7 @@
 #define KEY_SLEEP MediaKey(0x32)
 #define KEY_POWER MediaKey(0x30) // Nexus 7: sending KEY_POWER shows the power-off menu; holding KEY_SLEEP does the same
 #define KEY_PLAYPAUSE MediaKey(0xcd)
+#define KEY_STOP MediaKey(0xb7)
 #define KEY_PREV MediaKey(0xb6)
 #define KEY_NEXT MediaKey(0xb5)
 #define KEY_REWIND MediaKey(0xb4)
@@ -137,8 +138,8 @@ typedef struct {
 //
 static SwitchAction const SwitchActionMap[7] = {
     // PORTB0 = S2 / down
-    { (uint16_t[]){ KEY_WWWHOME, 0 },
-      (uint16_t[]){ KEY_WWWSEARCH, 0 } },   
+    { (uint16_t[]){ KEY_STOP, 0 },
+      (uint16_t[]){ KEY_WWWHOME, 0 } },   
 
     // PORTB1 = A (dial; ignored)
     { NULL, NULL },              
