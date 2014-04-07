@@ -2,6 +2,7 @@
 #include <avr/pgmspace.h>
 #include <avr/interrupt.h>
 #include <avr/sleep.h>
+#include <avr/wdt.h>
 #include <util/delay.h>
 #include <stdint.h>
 
@@ -262,6 +263,15 @@ static uint8_t long_press_switches = 0x7f;
 #define IsMediaKey(scancode) (0x1000 & scancode)
 
 static void setup(void) {
+
+    LED_CONFIG;
+    LED_ON;
+    
+    // Clear the watchdog
+    MCUSR &= ~_BV(WDRF);
+    wdt_disable();
+    wdt_reset();
+    
     // 16 MHz clock speed
 	CPU_PRESCALE(0);
 
@@ -272,7 +282,6 @@ static void setup(void) {
     // the switch is pressed (ie. active low).
     PORTB = 0x7f;
 
-    LED_CONFIG;
     LED_OFF;
     
     for (uint8_t i = 0; i < 7; i++) {
@@ -285,11 +294,19 @@ static void setup(void) {
 	// to the USB port, this will wait forever.
 	usb_init();
 	while (!usb_configured()) /* wait */ ;
-    
-	// Wait an extra second for the PC's operating system to load drivers
-	// and do whatever it does to actually be ready for input
-	_delay_ms(1000);
 
+    LED_ON;
+    
+	// Wait an extra second for the PC's operating system to load
+	// drivers and do whatever it does to actually be ready for input.
+	// Show a little light show during this time.
+    for(uint8_t i = 0; i < 5; i++) {
+        _delay_ms(180);
+        LED_OFF;
+        _delay_ms(20);
+        LED_ON;
+    }
+    
     cli();
     
     // Configure timer 0 to give us ticks
@@ -443,6 +460,7 @@ static void release_keys(uint16_t const *const keys) {
     send_keys(keys, 0);
 }
 
+
 static void run(void) {
     uint8_t last_pressed_keys = 0x7f;
     uint8_t last_long_pressed_keys = 0x7f;
@@ -450,6 +468,9 @@ static void run(void) {
     uint8_t dial_moving = 0;
     uint8_t dial_position = (PINB >> DialA) & 0x01;
     Direction dial_direction = DirectionCCW;
+
+    wdt_reset();
+    wdt_enable(WDTO_1S);
     
 	for(;;) {        
         uint8_t timer0_fired = 0;
@@ -477,6 +498,8 @@ static void run(void) {
         sei();
 
         if (timer0_fired) {
+            wdt_reset();
+            
             update_debounced_state(raw_switches_state);
             uint8_t changed_keys = last_pressed_keys ^ debounced_switches;
             uint8_t changed_long_keys = last_long_pressed_keys ^ long_press_switches;
