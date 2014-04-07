@@ -144,11 +144,11 @@ static SwitchAction const SwitchActionMap[7] = {
       NULL },
 
     // PORTB3 = S5 / left
-    { (uint16_t[]){ KEY_PREV, 0 },     
-      NULL },
+    { (uint16_t[]){ KEY_5, 0 },     
+      (uint16_t[]){ KEY_5, KEY_SHIFT, 0 } },
 
     // PORTB4 = S4 / up
-    { (uint16_t[]){ KEY_PLAYPAUSE, 0 },     
+    { (uint16_t[]){ KEY_4, 0 },     
       NULL },
 
     // PORTB5 = B (dial; ignored)
@@ -338,12 +338,12 @@ static void update_debounced_state(uint8_t raw_switches_state) {
     }
 }
 
-static void media_key_change(uint16_t const key, uint8_t const newstate) {
+static void media_key_change(uint16_t const key, uint8_t const pressed) {
     uint8_t i, free_index = 255;
 
     for(i = 0; i < 4; i++) {
         if (media_keys[i] == key) {
-            if (newstate) {
+            if (pressed) {
                 // The key is already on; we can stop altogether
                 free_index = 255;
                 break;
@@ -351,13 +351,13 @@ static void media_key_change(uint16_t const key, uint8_t const newstate) {
                 media_keys[i] = 0;
             }
         }
-        if (newstate && !media_keys[i] && free_index == 255) {
+        if (pressed && !media_keys[i] && free_index == 255) {
             free_index = i;
         }
     }
 
-    if (newstate && free_index < 4) {
-        // If newstate but free_index == 255, then we either don't
+    if (pressed && free_index < 4) {
+        // If pressed but free_index == 255, then we either don't
         // have room in the buffer for the new key, or the key is
         // already pressed.  Either way we have no action to take.
         //
@@ -368,13 +368,13 @@ static void media_key_change(uint16_t const key, uint8_t const newstate) {
     }
 }
 
-static void basic_key_change(uint8_t const key, uint8_t const newstate) {
+static void basic_key_change(uint8_t const key, uint8_t const pressed) {
     uint8_t i, free_index = 255;
 
     if (key >= MODIFIER_KEYS_START && key <= MODIFIER_KEYS_END) {
         // modifier keys are stored as bitfields
         uint8_t affected_field = key & 0x07; // 0b00000xxx: 227 (KEY_GUI) => 0b00000011 (3)
-        uint8_t mask = (newstate ? 0x01 : 0) << affected_field; // 1 << 3 => 0b00001000 (or 0 if turning off)
+        uint8_t mask = (pressed ? 0x01 : 0) << affected_field; // 1 << 3 => 0b00001000 (or 0 if turning off)
 
         keyboard_modifier_keys &= ~(0x01 << affected_field);
         keyboard_modifier_keys |= mask;
@@ -384,7 +384,7 @@ static void basic_key_change(uint8_t const key, uint8_t const newstate) {
     
     for(i = 0; i < 6; i++) {
         if (keyboard_keys[i] == key) {
-            if (newstate) {
+            if (pressed) {
                 // The key is already on; we can stop altogether
                 free_index = 255;
                 break;
@@ -392,13 +392,13 @@ static void basic_key_change(uint8_t const key, uint8_t const newstate) {
                 keyboard_keys[i] = 0;
             }
         }
-        if (newstate && !keyboard_keys[i] && free_index == 255) {
+        if (pressed && !keyboard_keys[i] && free_index == 255) {
             free_index = i;
         }
     }
 
-    if (newstate && free_index < 4) {
-        // If newstate but free_index == 255, then we either don't
+    if (pressed && free_index < 4) {
+        // If pressed but free_index == 255, then we either don't
         // have room in the buffer for the new key, or the key is
         // already pressed.  Either way we have no action to take.
         //
