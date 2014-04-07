@@ -76,7 +76,12 @@ typedef struct {
 
 // Number of ticks that must pass before a held key is treated as a
 // long press.  This must be greater than DebounceTickLimit.
-static uint16_t const LongPressTime = 80;
+//
+// We get 244.14 ticks per second (configurable; see Timer0Overflow),
+// so you can calculate your preferred time:
+//
+// LongPressTime = time_in_ms * 244.14 / 1000
+static uint16_t const LongPressTime = 160;   // About 2/3 of a second.
 
 // Specify NULL instead of an array to not send any keys when that
 // switch is pressed.
