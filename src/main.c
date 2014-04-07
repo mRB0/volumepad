@@ -144,11 +144,11 @@ static SwitchAction const SwitchActionMap[7] = {
       NULL },
 
     // PORTB3 = S5 / left
-    { (uint16_t[]){ KEY_5, 0 },     
-      (uint16_t[]){ KEY_5, KEY_SHIFT, 0 } },
+    { (uint16_t[]){ KEY_PREV, 0 },     
+      NULL },
 
     // PORTB4 = S4 / up
-    { (uint16_t[]){ KEY_4, 0 },     
+    { (uint16_t[]){ KEY_PLAYPAUSE, 0 },     
       NULL },
 
     // PORTB5 = B (dial; ignored)
