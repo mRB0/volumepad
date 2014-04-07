@@ -401,7 +401,7 @@ static void basic_key_change(uint8_t const key, uint8_t const pressed) {
         }
     }
 
-    if (pressed && free_index < 4) {
+    if (pressed && free_index < 6) {
         // If pressed but free_index == 255, then we either don't
         // have room in the buffer for the new key, or the key is
         // already pressed.  Either way we have no action to take.
