@@ -409,6 +409,11 @@ static void basic_key_change(uint8_t const key, uint8_t const pressed) {
         //
         // This path, however, is when we found an empty slot in the
         // key buffer, so we put the key into it.
+        //
+        // (Actually, when we have no buffer space left, the HID spec
+        // says we're supposed to send something else in the buffer to
+        // indicate that more keys are pressed than we can indicate.
+        // Let's not, though.)
 
         keyboard_keys[free_index] = key;
     }
